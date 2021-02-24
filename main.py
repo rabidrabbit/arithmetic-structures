@@ -16,7 +16,7 @@ def is_arithmetic_structure(graph):
     Determines if a given graph is an arithmetic structure and returns a boolean.
     An arithmetic structure occurs when:
     (1) The weight of a vertex divides the total sum of its neighbors' weights
-    (2) The numbers used have no common factor
+    (2) The numbers used have no common factor (besides 1)
     """
     for node in graph.nodes:
         neighbors = G.neighbors(node)
@@ -48,14 +48,19 @@ def set_weights(graph, weights):
     for i in range(len(weights)):
         graph.nodes[list(graph.nodes)[i]]['weight'] = weights[i]
 
-def exhausitive_search(graph, min_weight = 1, max_weight = 25):
+def exhausitive_search(graph, min_weight = 1, max_weight = 10):
     """
     Exhaustively searches for arithmetical structures by using combinations with repetitions on the list [min_weight..max_weight].
+    Let n denote the number of vertices. Then, there are n^(max_weight - min_weight) possible combinations.
     """
     initialize_node_weights(graph)
     solutions = []
 
     for combination in product(range(min_weight, max_weight + 1), repeat=graph.number_of_nodes()):
+        # Prune combinations that have a factor (other than 1) dividing each number
+        if reduce(gcd, [graph.nodes[n]['weight'] for n in graph.nodes]) != 1:
+            continue
+
         set_weights(graph, combination)
         if is_arithmetic_structure(graph):
             solutions.append(combination)
@@ -64,7 +69,7 @@ def exhausitive_search(graph, min_weight = 1, max_weight = 25):
 
 if __name__ == "__main__":
     G = nx.complete_graph(4)
-    solutions = exhausitive_search(G)
+    solutions = exhausitive_search(G, max_weight=40)
     print(solutions)
     print(len(solutions))
 
