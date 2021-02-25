@@ -81,7 +81,6 @@ def is_smooth_graph(graph):
         total_neighbor_weight_sum = get_total_weight_sum(graph, neighbors)
         node_weight = get_weight(graph, node)
 
-        
         if node_weight == total_neighbor_weight_sum:
             return False
     
@@ -93,16 +92,29 @@ def smooth_graph(graph):
     """
     return None
 
-if __name__ == "__main__":
-    G = nx.path_graph(4)
-    solutions = exhausitive_search(G, max_weight=20)
-    print(solutions)
-    print(len(solutions))
+def create_bident_graph(length = 0):
+    """
+    Labelling the fork vertices as vx and vy, constructs a path starting from v0, which creates a bident graph.
+    """
+    graph = nx.path_graph(length + 2)
+    graph.add_node(length + 2)
+    graph.add_edge(length + 2, length)  # Create fork at the end of the path
 
-    for s in solutions:
-        set_weights(G, s)
-        print(s, end='')
-        print(" is smooth? %r" % (is_smooth_graph(G)))
+    return graph
+
+
+if __name__ == "__main__":
+    G = nx.complete_graph(4)
+    initialize_node_weights(G)
+    # print(nx.adjacency_matrix(G).todense())
+    solutions = exhausitive_search(G, max_weight=25)
+    # print(solutions)
+    # print(len(solutions))
+
+    # for s in solutions:
+    #     set_weights(G, s)
+    #     print(s, end='')
+    #     print(" is smooth? %r" % (is_smooth_graph(G)))
 
     # Draw graph to screen/save to file
     labels = {n: G.nodes[n]['weight'] for n in G.nodes}
