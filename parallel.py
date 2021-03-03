@@ -2,38 +2,14 @@
 Searches for arithmetic structures given a graph.
 """
 
+from dask.distributed import Client, as_completed, wait
+import dask.array as da
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as numpy
 from math import gcd
 from functools import reduce
-from itertools import product
-
-def get_weight(graph, node):
-    return graph.nodes[node]['weight']
-
-def get_total_weight_sum(graph, nodes):
-    return sum([get_weight(graph, n) for n in nodes])
-
-def is_arithmetic_structure(adjancency_matrix, combination):
-    """
-    Determines if a given graph is an arithmetic structure and returns a boolean.
-    An arithmetic structure occurs when:
-    (1) The weight of a vertex divides the total sum of its neighbors' weights
-    (2) The numbers used have no common factor (besides 1)
-    """
-    weights = numpy.array(combination)
-    total_neighbor_weight_sums = adjancency_matrix.dot(weights)
-
-    for i in range(len(total_neighbor_weight_sums)):
-        total_sum = int(total_neighbor_weight_sums[i])
-        node_weight = weights[i]
-
-        # Verify that the weight of a vertex divides the total sum of its neighbors' weights
-        if total_sum % node_weight:
-            return False
-
-    return True
+from itertools import product, islice, chain
 
 def initialize_node_weights(graph):
     """
@@ -49,23 +25,61 @@ def set_weights(graph, weights):
     for i in range(len(weights)):
         graph.nodes[list(graph.nodes)[i]]['weight'] = weights[i]
 
-def exhausitive_search(graph, min_weight = 1, max_weight = 10):
+def is_arithmetic_structure(adjancency_matrix, start_condition, min_weight, max_weight, repeat_number):
     """
-    Exhaustively searches for arithmetical structures by using combinations with repetitions on the list [min_weight..max_weight].
-    Let n denote the number of vertices. Then, there are (max_weight - min_weight + 1)^n possible combinations.
+    Determines if a given graph is an arithmetic structure and returns a boolean.
+    An arithmetic structure occurs when:
+    (1) The weight of a vertex divides the total sum of its neighbors' weights
+    (2) The numbers used have no common factor (besides 1)
     """
-    initialize_node_weights(graph)
     solutions = []
+    product_generator = product(range(min_weight, max_weight + 1), repeat=repeat_number)
 
-    adjancency_matrix = nx.adjacency_matrix(graph)
+    for c in product_generator:
+        combination = start_condition + c
 
-    for combination in product(range(min_weight, max_weight + 1), repeat=graph.number_of_nodes()):
         # Prune combinations that have a factor (other than 1) dividing each number
         if reduce(gcd, combination) != 1:
             continue
 
-        if is_arithmetic_structure(adjancency_matrix, combination):
+        weights = numpy.array(combination).astype(float)
+        total_neighbor_weight_sums = adjancency_matrix.dot(weights)
+        fail_flag = False
+
+        for i in range(len(total_neighbor_weight_sums)):
+            total_sum = int(total_neighbor_weight_sums[i])
+            node_weight = int(weights[i])
+
+            # Verify that the weight of a vertex divides the total sum of its neighbors' weights
+            if total_sum % node_weight:
+                fail_flag = True
+                break
+
+        if not fail_flag:
             solutions.append(combination)
+
+    return solutions
+
+def parallel_exhausitive_search(graph, client, min_weight = 1, max_weight = 10):
+    """
+    Exhaustively searches for arithmetical structures by using combinations with repetitions on the list [min_weight..max_weight].
+    Let n denote the number of vertices. Then, there are (max_weight - min_weight + 1)^n possible combinations.
+    A parallel implementation of the exhaustive search algorithm.
+    """
+    futures = []
+    solutions = []
+
+    print(client)
+    batch_size = 10**3
+
+    adjancency_matrix = nx.adjacency_matrix(graph)
+
+    for i in range(min_weight, max_weight+1):
+        future = client.submit(is_arithmetic_structure, adjancency_matrix, (i,), min_weight, max_weight, graph.number_of_nodes() - 1)
+        futures.append(future)
+
+    wait(futures)
+    solutions = [item for sublist in client.gather(futures) for item in sublist]
 
     return solutions
 
@@ -106,12 +120,10 @@ def create_bident_graph(length = 0):
 
 
 if __name__ == "__main__":
-    G = nx.complete_graph(5)
-    initialize_node_weights(G)
-    # print(nx.adjacency_matrix(G).todense())
-    solutions = exhausitive_search(G, max_weight=28)
+    client = Client()
+    G = nx.balanced_tree(2, 3)
+    solutions = parallel_exhausitive_search(G, max_weight=30, client=client)
     print(solutions)
-    print(len(solutions))
 
     # for s in solutions:
     #     set_weights(G, s)
@@ -119,7 +131,7 @@ if __name__ == "__main__":
     #     print(" is smooth? %r" % (is_smooth_graph(G)))
 
     # Draw graph to screen/save to file
-    # labels = {n: G.nodes[n]['weight'] for n in G.nodes}
+    initialize_node_weights(G)
     labels = {n:n for n in G.nodes}
     nx.draw(G, with_labels=True, labels=labels)
     plt.savefig("dummy.png")
